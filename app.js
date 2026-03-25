@@ -1,5 +1,5 @@
-const tokenKey = "antigravity-token";
-const themeKey = "antigravity-theme";
+const tokenKey = "saveeats-token";
+const themeKey = "saveeats-theme";
 
 const scenarios = {
   bistro: {
