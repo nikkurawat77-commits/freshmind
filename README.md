@@ -1,8 +1,20 @@
-# SaveEats
+<p align="center">
+  <img src="./docs/saveeats-hero.svg" alt="SaveEats hero banner" width="100%" />
+</p>
 
-SaveEats is a kitchen demand and service operations web app for restaurants, food trucks, and cafes.
+<h1 align="center">SaveEats</h1>
 
-It helps operators plan daily service, monitor demand patterns, reduce food waste, manage prep targets, review historical sales data, and explore subscription and billing flows inside one polished product surface.
+<p align="center">
+  Kitchen demand and service operations for restaurants, food trucks, and cafes.
+</p>
+
+<p align="center">
+  <a href="https://saveeats-kitchen-h7r7xff85-nikhil-rawats-projects-92c1a75c.vercel.app">Live Preview</a>
+  ·
+  <a href="https://github.com/nikkurawat77-commits/saveeats-kitchen-ops">GitHub Repo</a>
+</p>
+
+SaveEats is a polished product prototype that helps operators plan daily service, monitor demand patterns, reduce food waste, manage prep targets, review historical sales data, and explore subscription and billing flows inside one cohesive workspace.
 
 ## Live Project
 
@@ -19,6 +31,16 @@ It helps operators plan daily service, monitor demand patterns, reduce food wast
 - Billing and subscription management UI
 - Light mode and dark mode support
 - Vercel deployment setup for live preview hosting
+
+## Screenshots
+
+### Product Overview
+
+![SaveEats hero overview](./docs/saveeats-hero.svg)
+
+### Dashboard Preview
+
+![SaveEats dashboard preview](./docs/saveeats-dashboard.svg)
 
 ## Tech Stack
 
