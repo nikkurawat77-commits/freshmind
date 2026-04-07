@@ -1,13 +1,14 @@
 # FreshMind
 
-FreshMind is a polished React product for AI-powered kitchen tracking, food waste reduction, and smarter home food decisions.
+FreshMind is a polished SaaS-style React product for AI-powered kitchen tracking, food waste reduction, and smarter home food decisions.
 
 Live product areas include:
-- animated startup-style landing page
+- startup-grade landing page with Framer Motion product storytelling
 - login and signup with localStorage session handling
 - food tracker with expiry states and swipe-to-delete interactions
+- AI Studio workspace with kitchen health scoring, smart actions, demand forecasting, and marketplace pricing guidance
 - Claude-powered recipe suggestion flow with graceful fallback logic
-- savings analytics with Recharts
+- savings analytics and custom SVG product charts
 - leftover marketplace and nearby restaurant deals
 - mobile-ready install metadata via web manifest and app icons
 
@@ -17,7 +18,6 @@ Live product areas include:
 - Framer Motion
 - Tailwind CSS via CDN utilities
 - Lucide React
-- Recharts
 - Vite
 
 ## Local Development
@@ -48,4 +48,5 @@ Create a local env file from `.env.example` and add your key if you want live re
 
 - Authentication is localStorage-based for product prototyping.
 - Recipe generation is production-shaped, but still depends on a client-side environment key in this version.
+- The AI Studio experience uses deterministic product logic for forecasting, scoring, and pricing guidance so the app still feels complete without server infrastructure.
 - The app is fully responsive and designed to be portfolio-ready.

@@ -40,20 +40,6 @@ import {
   User2,
   X
 } from "lucide-react";
-import {
-  Bar,
-  BarChart,
-  Cell,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis
-} from "recharts";
 
 const PIE_COLORS = ["#10B981", "#34D399", "#F59E0B", "#F97316", "#EF4444"];
 
@@ -158,6 +144,7 @@ const SCREEN_PREVIEWS = [
 
 const NAV_TABS = [
   { id: "dashboard", label: "Dashboard", icon: Home },
+  { id: "insights", label: "AI Studio", icon: Sparkles },
   { id: "food", label: "My Food", icon: Refrigerator },
   { id: "recipes", label: "Recipes", icon: ChefHat },
   { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
@@ -249,6 +236,119 @@ function seedWasteBreakdown() {
     { name: "Bakery", value: 14 },
     { name: "Fruit", value: 10 }
   ];
+}
+
+function seedWorkspaceProfile() {
+  return {
+    teamName: "FreshMind Labs",
+    plan: "Growth",
+    seats: 5,
+    aiCreditsUsed: 1840,
+    aiCreditsLimit: 5000,
+    automationRuns: 18,
+    trialEnds: "2026-05-12",
+    monthlyGoal: 250
+  };
+}
+
+function clamp(value, min, max) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getDaysUntilExpiry(expiryDate) {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const expiry = new Date(expiryDate);
+  expiry.setHours(0, 0, 0, 0);
+  return Math.round((expiry.getTime() - now.getTime()) / 86400000);
+}
+
+function getItemValue(item) {
+  const categoryValues = {
+    Vegetables: 5,
+    Fruit: 4,
+    Dairy: 6,
+    Meat: 11,
+    Bakery: 3,
+    Pantry: 4
+  };
+  return categoryValues[item?.category] || 5;
+}
+
+function getSuggestedMarketplacePrice(item) {
+  const quantityMatch = `${item?.qty || item?.quantity || "1"}`.match(/\d+/);
+  const quantityMultiplier = clamp(Number(quantityMatch?.[0] || 1), 1, 4) * 0.35;
+  const days = item?.expiry ? getDaysUntilExpiry(item.expiry) : 1;
+  const freshnessMultiplier = days <= 1 ? 0.45 : days <= 3 ? 0.58 : 0.74;
+  const suggested = Math.round(getItemValue(item) * (1 + quantityMultiplier) * freshnessMultiplier);
+  return Math.max(0, suggested);
+}
+
+function buildAiOperatingSystem(foodItems, marketplaceListings, savingsHistory, savedRecipes) {
+  const sortedByUrgency = [...foodItems].sort((left, right) => getDaysUntilExpiry(left.expiry) - getDaysUntilExpiry(right.expiry));
+  const urgentItems = sortedByUrgency.filter((item) => getDaysUntilExpiry(item.expiry) <= 3);
+  const freshItems = foodItems.filter((item) => getDaysUntilExpiry(item.expiry) > 7);
+  const expiredItems = foodItems.filter((item) => getDaysUntilExpiry(item.expiry) < 0);
+  const atRiskValue = urgentItems.reduce((sum, item) => sum + getItemValue(item), 0);
+  const latestSaved = savingsHistory[savingsHistory.length - 1]?.saved || 0;
+  const projectedSaved = Math.round(latestSaved * 1.18);
+  const rescueValue = Math.round(atRiskValue * 1.45);
+  const healthScore = clamp(Math.round(88 - expiredItems.length * 18 - urgentItems.length * 7 + freshItems.length * 1.2), 34, 98);
+  const usageRate = clamp(Math.round((foodItems.length / Math.max(foodItems.length + expiredItems.length, 1)) * 100), 42, 97);
+  const aiConfidence = clamp(Math.round(72 + freshItems.length * 2 - expiredItems.length * 3), 51, 96);
+  const marketplaceOpportunities = sortedByUrgency.slice(0, 3).map((item) => ({
+    name: item.name,
+    suggestedPrice: getSuggestedMarketplacePrice(item),
+    urgencyLabel: getDaysUntilExpiry(item.expiry) <= 1 ? "List in the next 2 hours" : "Bundle before tomorrow",
+    rationale: `${item.category} inventory with ${Math.max(getDaysUntilExpiry(item.expiry), 0)} day${getDaysUntilExpiry(item.expiry) === 1 ? "" : "s"} left`
+  }));
+  const weeklyPlan = sortedByUrgency.slice(0, 4).map((item, index) => ({
+    id: item.id,
+    day: ["Today", "Tomorrow", "Thursday", "Friday"][index] || `Day ${index + 1}`,
+    title: `${item.name} rescue plan`,
+    detail: `Use ${item.name.toLowerCase()} in a quick ${item.category.toLowerCase()}-first meal before ${item.expiry}.`,
+    impact: `$${Math.max(4, getItemValue(item) + index)} saved`
+  }));
+  const demandCurve = Array.from({ length: 7 }, (_, index) => ({
+    day: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][index],
+    value: clamp(Math.round(32 + freshItems.length * 3 + urgentItems.length * 6 - index * 2 + (index % 2 === 0 ? 5 : -3)), 18, 92)
+  }));
+  const smartActions = [
+    {
+      title: "Launch an expiry-first recipe block",
+      detail: urgentItems[0]
+        ? `Feature ${urgentItems[0].name} in the next meal plan and push a same-day notification to reduce waste.`
+        : "You have healthy inventory coverage today. Queue a recipe campaign for tomorrow morning.",
+      impact: `$${Math.max(18, Math.round(atRiskValue * 0.7))} protected`
+    },
+    {
+      title: "Bundle low-margin inventory",
+      detail: marketplaceListings.length
+        ? "Pair your existing marketplace listings with one expiring item to improve pickup conversion."
+        : "Create your first rescue bundle so nearby buyers can pick up extras before close.",
+      impact: `${Math.max(1, urgentItems.length)} bundle${urgentItems.length === 1 ? "" : "s"} recommended`
+    },
+    {
+      title: "Forecast next week's savings",
+      detail: `FreshMind expects your current rhythm to reach $${projectedSaved} in monthly savings if rescue actions stay on pace.`,
+      impact: `${aiConfidence}% AI confidence`
+    }
+  ];
+
+  return {
+    healthScore,
+    usageRate,
+    aiConfidence,
+    atRiskCount: urgentItems.length,
+    atRiskValue,
+    rescueValue,
+    projectedSaved,
+    smartActions,
+    weeklyPlan,
+    marketplaceOpportunities,
+    demandCurve,
+    automationCoverage: clamp(Math.round((savedRecipes.length + marketplaceListings.length + freshItems.length) * 3.2), 18, 94)
+  };
 }
 
 function useLocalStorageState(key, initialValue) {
@@ -952,7 +1052,7 @@ function AuthPage({ authMode, setAuthMode, onBack, onAuthSubmit, onTryDemo, onGo
   );
 }
 
-function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown, savedRecipes }) {
+function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown, savedRecipes, marketplaceListings, workspaceProfile }) {
   const expiringSoon = foodItems.filter((item) => {
     const details = getExpiryDetails(item.expiry);
     return details.badge === "Use Soon" || details.badge === "Expiring";
@@ -961,6 +1061,7 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
   const totalWasteAvoided = (
     foodItems.reduce((sum, item) => sum + (getExpiryDetails(item.expiry).badge === "Expired" ? 0.12 : 0.35), 0) + 0.7
   ).toFixed(1);
+  const aiOps = buildAiOperatingSystem(foodItems, marketplaceListings, savingsHistory, savedRecipes);
 
   return (
     <motion.div key="dashboard-home" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.35 }} className="space-y-6">
@@ -974,6 +1075,53 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
           <div className="rounded-3xl border border-white/10 bg-slate-950/40 px-5 py-4">
             <p className="text-sm text-slate-400">Member since</p>
             <p className="mt-2 font-mono text-xl text-white">{formatJoinDate(currentUser.joined)}</p>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-slate-400">AI Command Center</p>
+                <h2 className="mt-2 font-display text-2xl text-white">Live operating signals for your workspace</h2>
+              </div>
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">
+                {aiOps.aiConfidence}% confidence
+              </span>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              {[
+                ["Kitchen health", `${aiOps.healthScore}%`],
+                ["Automation coverage", `${aiOps.automationCoverage}%`],
+                ["Projected monthly savings", `$${aiOps.projectedSaved}`]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <p className="text-xs text-slate-400">{label}</p>
+                  <p className="mt-2 font-mono text-2xl text-white">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+            <p className="text-sm uppercase tracking-[0.28em] text-slate-400">Workspace</p>
+            <h2 className="mt-2 font-display text-2xl text-white">{workspaceProfile.teamName}</h2>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-slate-400">Plan</p>
+                <p className="mt-2 text-lg text-white">{workspaceProfile.plan}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-slate-400">Seats</p>
+                <p className="mt-2 text-lg text-white">{workspaceProfile.seats} active</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-slate-400">AI credits</p>
+                <p className="mt-2 text-lg text-white">{workspaceProfile.aiCreditsUsed} / {workspaceProfile.aiCreditsLimit}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-xs text-slate-400">Automation runs</p>
+                <p className="mt-2 text-lg text-white">{workspaceProfile.automationRuns} this month</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1007,15 +1155,7 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
             <h2 className="mt-2 font-display text-2xl text-white">Your six-month progress</h2>
           </div>
           <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={savingsHistory}>
-                <XAxis dataKey="month" stroke="#94A3B8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 18 }} />
-                <Line type="monotone" dataKey="saved" stroke="#10B981" strokeWidth={3} dot={{ fill: "#10B981" }} />
-                <Line type="monotone" dataKey="wasted" stroke="#F59E0B" strokeWidth={3} dot={{ fill: "#F59E0B" }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <SimpleLineChart data={savingsHistory} />
           </div>
         </div>
 
@@ -1025,17 +1165,7 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
             <h2 className="mt-2 font-display text-2xl text-white">Where you lose the most value</h2>
           </div>
           <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={wasteBreakdown} dataKey="value" innerRadius={72} outerRadius={110} paddingAngle={4}>
-                  {wasteBreakdown.map((entry, index) => (
-                    <Cell key={entry.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 18 }} />
-                <Legend wrapperStyle={{ color: "#94A3B8" }} />
-              </PieChart>
-            </ResponsiveContainer>
+            <SimpleDonutChart data={wasteBreakdown} />
           </div>
         </div>
       </div>
@@ -1047,16 +1177,11 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
             <h2 className="mt-2 font-display text-2xl text-white">Saved vs. would have wasted</h2>
           </div>
           <div className="h-[320px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={savingsHistory}>
-                <XAxis dataKey="month" stroke="#94A3B8" tickLine={false} axisLine={false} />
-                <YAxis stroke="#94A3B8" tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={{ backgroundColor: "#111827", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 18 }} />
-                <Legend wrapperStyle={{ color: "#94A3B8" }} />
-                <Bar dataKey="saved" fill="#10B981" radius={[12, 12, 0, 0]} />
-                <Bar dataKey="wasted" fill="#F59E0B" radius={[12, 12, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <SimpleBarChart data={savingsHistory} />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-300">
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />Saved</span>
+            <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Would have wasted</span>
           </div>
         </div>
 
@@ -1083,6 +1208,50 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
                 <div><p className="text-sm text-slate-400">Saved recipes</p><p className="mt-1 font-mono text-2xl text-white">{savedRecipes.length}</p></div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-400">AI Priorities</p>
+              <h2 className="mt-2 font-display text-2xl text-white">What FreshMind recommends next</h2>
+            </div>
+            <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs uppercase tracking-[0.28em] text-slate-300">
+              ${aiOps.rescueValue} rescue value
+            </span>
+          </div>
+          <div className="mt-6 grid gap-4">
+            {aiOps.smartActions.map((action) => (
+              <motion.div key={action.title} whileHover={{ y: -3, scale: 1.01 }} className="rounded-[26px] border border-white/10 bg-slate-950/45 p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-display text-2xl text-white">{action.title}</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-400">{action.detail}</p>
+                  </div>
+                  <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">
+                    {action.impact}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Predicted Demand</p>
+          <h2 className="mt-2 font-display text-2xl text-white">Seven-day activity curve</h2>
+          <div className="mt-6">
+            <DemandBars data={aiOps.demandCurve} />
+          </div>
+          <div className="mt-6 rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+            <p className="text-sm text-slate-400">Monthly goal</p>
+            <p className="mt-2 font-mono text-3xl text-white">${workspaceProfile.monthlyGoal}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-400">
+              FreshMind projects ${aiOps.projectedSaved} this month based on your current ingredient mix, rescue pace, and saved recipe usage.
+            </p>
           </div>
         </div>
       </div>
@@ -1203,6 +1372,7 @@ function RecipesPage({ foodItems, recipeSuggestions, setRecipeSuggestions, saved
   const [recipeError, setRecipeError] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [sourceLabel, setSourceLabel] = useState("");
+  const aiPlaybook = buildAiOperatingSystem(foodItems, [], [{ month: "Now", saved: 48, wasted: 22 }], savedRecipes);
 
   async function suggestRecipes() {
     if (!foodItems.length) {
@@ -1279,6 +1449,29 @@ function RecipesPage({ foodItems, recipeSuggestions, setRecipeSuggestions, saved
           </div>
 
           {recipeError ? <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mt-5 rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{recipeError}</motion.div> : null}
+
+          <div className="mt-6 rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-slate-400">AI Meal Plan</p>
+                <h3 className="mt-2 font-display text-2xl text-white">Inventory-first prep sequence</h3>
+              </div>
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">
+                {aiPlaybook.atRiskCount} urgent items
+              </span>
+            </div>
+            <div className="mt-5 space-y-3">
+              {aiPlaybook.weeklyPlan.slice(0, 3).map((item) => (
+                <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="font-medium text-white">{item.title}</p>
+                    <span className="text-xs uppercase tracking-[0.24em] text-slate-400">{item.day}</span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">{item.detail}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
@@ -1413,10 +1606,19 @@ function AlertsPage({ foodItems, setFoodItems, setMarketplaceListings, addToast 
   );
 }
 
-function MarketplacePage({ marketplaceListings, setMarketplaceListings, restaurantDeals, addToast }) {
+function MarketplacePage({ foodItems, marketplaceListings, setMarketplaceListings, restaurantDeals, addToast }) {
   const [listingFilter, setListingFilter] = useState("all");
   const [restaurantFilters, setRestaurantFilters] = useState({ distance: "all", cuisine: "all", discount: "all" });
   const [listingForm, setListingForm] = useState({ name: "", quantity: "", price: "", pickup: "", photo: "" });
+  const referenceFood = foodItems.find((item) => item.name.toLowerCase() === listingForm.name.trim().toLowerCase());
+  const suggestedPrice = listingForm.name.trim()
+    ? getSuggestedMarketplacePrice({
+        name: listingForm.name,
+        qty: listingForm.quantity || referenceFood?.qty || "1",
+        category: referenceFood?.category || "Pantry",
+        expiry: referenceFood?.expiry || isoFromDays(1)
+      })
+    : 0;
 
   function addListing(event) {
     event.preventDefault();
@@ -1463,6 +1665,21 @@ function MarketplacePage({ marketplaceListings, setMarketplaceListings, restaura
             <input value={listingForm.quantity} onChange={(event) => setListingForm((current) => ({ ...current, quantity: event.target.value }))} placeholder="Quantity" className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none" />
             <input value={listingForm.price} onChange={(event) => setListingForm((current) => ({ ...current, price: event.target.value }))} placeholder="Price (0 for free)" className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none" />
             <input value={listingForm.pickup} onChange={(event) => setListingForm((current) => ({ ...current, pickup: event.target.value }))} placeholder="Pickup time" className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none" />
+            <div className="rounded-[26px] border border-emerald-400/20 bg-emerald-400/10 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.28em] text-emerald-200">AI pricing guidance</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-200">
+                    {listingForm.name.trim()
+                      ? `FreshMind suggests ${suggestedPrice === 0 ? "listing this free" : `pricing this around $${suggestedPrice}`} for faster same-day pickup.`
+                      : "Start typing an item name to get pricing guidance based on freshness and category value."}
+                  </p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-slate-950/40 px-3 py-1 text-sm text-white">
+                  {listingForm.name.trim() ? `$${suggestedPrice}` : "AI"}
+                </span>
+              </div>
+            </div>
             <GlowButton type="submit" className="w-full justify-center bg-primary/20 text-white shadow-glow">
               <ShoppingBag size={18} />
               Publish Listing
@@ -1596,11 +1813,132 @@ function MarketplacePage({ marketplaceListings, setMarketplaceListings, restaura
   );
 }
 
+function AIStudioPage({ foodItems, marketplaceListings, savingsHistory, savedRecipes, workspaceProfile, setRecipeSuggestions, addToast }) {
+  const aiOps = buildAiOperatingSystem(foodItems, marketplaceListings, savingsHistory, savedRecipes);
+
+  return (
+    <motion.div key="ai-studio-page" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }} className="space-y-6">
+      <div className="rounded-[32px] border border-white/10 bg-gradient-to-br from-cyan-400/10 via-white/5 to-emerald-500/10 p-6 backdrop-blur-xl lg:p-8">
+        <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-sm uppercase tracking-[0.3em] text-cyan-200">AI Studio</p>
+            <h1 className="mt-3 font-display text-4xl font-bold text-white lg:text-5xl">A SaaS-style command layer for recipes, pricing, rescue actions, and savings forecasts.</h1>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
+              FreshMind now behaves more like an operating system than a static tracker, with model-shaped guidance across inventory, marketplace timing, and waste reduction.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              ["Health score", `${aiOps.healthScore}%`],
+              ["AI confidence", `${aiOps.aiConfidence}%`],
+              ["Credits available", `${workspaceProfile.aiCreditsLimit - workspaceProfile.aiCreditsUsed}`]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-[26px] border border-white/10 bg-slate-950/45 p-4">
+                <p className="text-xs text-slate-400">{label}</p>
+                <p className="mt-2 font-mono text-2xl text-white">{value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Smart Actions</p>
+              <h2 className="mt-2 font-display text-2xl text-white">Priority queue generated from live inventory</h2>
+            </div>
+            <GlowButton onClick={() => { setRecipeSuggestions(buildFallbackRecipes(foodItems)); addToast("AI rescue flow ready", "FreshMind generated a fresh recipe batch from your current inventory."); }} className="bg-primary/20 text-white shadow-glow">
+              <Sparkles size={18} />
+              Run Rescue Flow
+            </GlowButton>
+          </div>
+          <div className="mt-6 grid gap-4">
+            {aiOps.smartActions.map((action, index) => (
+              <motion.div key={action.title} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08 }} className="rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <p className="font-display text-2xl text-white">{action.title}</p>
+                    <p className="mt-3 text-sm leading-7 text-slate-400">{action.detail}</p>
+                  </div>
+                  <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">{action.impact}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Demand Forecast</p>
+          <h2 className="mt-2 font-display text-2xl text-white">Operational activity for the next 7 days</h2>
+          <div className="mt-6">
+            <DemandBars data={aiOps.demandCurve} />
+          </div>
+          <div className="mt-6 rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+            <p className="text-sm text-slate-400">Suggested operating mode</p>
+            <p className="mt-2 font-display text-2xl text-white">{aiOps.atRiskCount >= 3 ? "Aggressive rescue mode" : "Steady optimization mode"}</p>
+            <p className="mt-3 text-sm leading-7 text-slate-400">
+              {aiOps.atRiskCount >= 3
+                ? "You have enough near-expiry inventory to justify an urgent recipe push and at least one marketplace bundle."
+                : "Inventory looks balanced. Keep notifications and recipe prompts on schedule to maintain savings momentum."}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Weekly AI Plan</p>
+          <h2 className="mt-2 font-display text-2xl text-white">What to cook, list, or protect next</h2>
+          <div className="mt-6 space-y-4">
+            {aiOps.weeklyPlan.map((item) => (
+              <div key={item.id} className="rounded-[26px] border border-white/10 bg-slate-950/45 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.28em] text-emerald-200">{item.day}</p>
+                    <p className="mt-2 font-display text-2xl text-white">{item.title}</p>
+                  </div>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-slate-300">{item.impact}</span>
+                </div>
+                <p className="mt-3 text-sm leading-7 text-slate-400">{item.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+          <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Marketplace Optimizer</p>
+          <h2 className="mt-2 font-display text-2xl text-white">AI pricing recommendations for fast pickup</h2>
+          <div className="mt-6 grid gap-4">
+            {aiOps.marketplaceOpportunities.map((item) => (
+              <motion.div key={item.name} whileHover={{ scale: 1.01, y: -4 }} className="rounded-[28px] border border-white/10 bg-slate-950/45 p-5">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="font-display text-2xl text-white">{item.name}</p>
+                    <p className="mt-2 text-sm text-slate-400">{item.rationale}</p>
+                    <p className="mt-3 text-sm text-emerald-200">{item.urgencyLabel}</p>
+                  </div>
+                  <div className="rounded-[24px] border border-emerald-400/20 bg-emerald-400/10 px-5 py-4 text-center">
+                    <p className="text-xs uppercase tracking-[0.28em] text-emerald-200">Suggested price</p>
+                    <p className="mt-2 font-mono text-3xl text-white">${item.suggestedPrice}</p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function DashboardShell({
   currentUser,
   currentTab,
   setCurrentTab,
   onLogout,
+  workspaceProfile,
   foodItems,
   setFoodItems,
   recipeSuggestions,
@@ -1632,7 +1970,7 @@ function DashboardShell({
               </div>
               <div>
                 <p className="font-display text-xl font-bold text-white">FreshMind</p>
-                <p className="text-sm text-slate-400">Kitchen command center</p>
+                <p className="text-sm text-slate-400">{workspaceProfile.teamName} workspace</p>
               </div>
             </div>
 
@@ -1649,6 +1987,9 @@ function DashboardShell({
             </nav>
 
             <div className="hidden items-center gap-3 lg:flex">
+              <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-4 py-2 text-sm text-emerald-200">
+                {workspaceProfile.plan} plan
+              </div>
               <div className="flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/40 px-3 py-2">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-200">
                   {currentUser.name.split(" ").map((item) => item[0]).join("").slice(0, 2)}
@@ -1707,15 +2048,160 @@ function DashboardShell({
 
         <main className="mt-8">
           <AnimatePresence mode="wait">
-            {currentTab === "dashboard" ? <DashboardHome key="dashboard-tab" currentUser={currentUser} foodItems={foodItems} savingsHistory={savingsHistory} wasteBreakdown={wasteBreakdown} savedRecipes={savedRecipes} /> : null}
+            {currentTab === "dashboard" ? <DashboardHome key="dashboard-tab" currentUser={currentUser} foodItems={foodItems} savingsHistory={savingsHistory} wasteBreakdown={wasteBreakdown} savedRecipes={savedRecipes} marketplaceListings={marketplaceListings} workspaceProfile={workspaceProfile} /> : null}
+            {currentTab === "insights" ? <AIStudioPage key="insights-tab" foodItems={foodItems} marketplaceListings={marketplaceListings} savingsHistory={savingsHistory} savedRecipes={savedRecipes} workspaceProfile={workspaceProfile} setRecipeSuggestions={setRecipeSuggestions} addToast={addToast} /> : null}
             {currentTab === "food" ? <MyFoodPage key="food-tab" foodItems={foodItems} setFoodItems={setFoodItems} addToast={addToast} /> : null}
             {currentTab === "recipes" ? <RecipesPage key="recipes-tab" foodItems={foodItems} recipeSuggestions={recipeSuggestions} setRecipeSuggestions={setRecipeSuggestions} savedRecipes={savedRecipes} setSavedRecipes={setSavedRecipes} addToast={addToast} /> : null}
-            {currentTab === "marketplace" ? <MarketplacePage key="marketplace-tab" marketplaceListings={marketplaceListings} setMarketplaceListings={setMarketplaceListings} restaurantDeals={restaurantDeals} addToast={addToast} /> : null}
+            {currentTab === "marketplace" ? <MarketplacePage key="marketplace-tab" foodItems={foodItems} marketplaceListings={marketplaceListings} setMarketplaceListings={setMarketplaceListings} restaurantDeals={restaurantDeals} addToast={addToast} /> : null}
             {currentTab === "alerts" ? <AlertsPage key="alerts-tab" foodItems={foodItems} setFoodItems={setFoodItems} setMarketplaceListings={setMarketplaceListings} addToast={addToast} /> : null}
           </AnimatePresence>
         </main>
       </div>
     </motion.div>
+  );
+}
+
+function DemandBars({ data }) {
+  const maxValue = Math.max(...data.map((point) => point.value), 1);
+
+  return (
+    <div className="flex h-[220px] items-end gap-3">
+      {data.map((point) => (
+        <div key={point.day} className="flex flex-1 flex-col items-center gap-3">
+          <div className="flex h-full w-full items-end justify-center">
+            <div
+              className="w-full rounded-t-[20px] bg-gradient-to-t from-emerald-400 to-cyan-300 shadow-[0_12px_30px_rgba(16,185,129,0.2)]"
+              style={{ height: `${(point.value / maxValue) * 100}%` }}
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-xs text-slate-400">{point.day}</p>
+            <p className="mt-1 font-mono text-sm text-white">{point.value}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SimpleLineChart({ data }) {
+  const width = 520;
+  const height = 260;
+  const padding = 24;
+  const chartHeight = height - padding * 2;
+  const chartWidth = width - padding * 2;
+  const maxValue = Math.max(...data.flatMap((point) => [point.saved, point.wasted]), 1);
+
+  function buildPath(key) {
+    return data.map((point, index) => {
+      const x = padding + (index / Math.max(data.length - 1, 1)) * chartWidth;
+      const y = height - padding - (point[key] / maxValue) * chartHeight;
+      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+    }).join(" ");
+  }
+
+  return (
+    <div className="flex h-full flex-col justify-between">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full overflow-visible">
+        {[0, 1, 2, 3].map((step) => {
+          const y = padding + (step / 3) * chartHeight;
+          return <line key={step} x1={padding} y1={y} x2={width - padding} y2={y} stroke="rgba(148,163,184,0.16)" strokeWidth="1" />;
+        })}
+        <path d={buildPath("saved")} fill="none" stroke="#10B981" strokeWidth="4" strokeLinecap="round" />
+        <path d={buildPath("wasted")} fill="none" stroke="#F59E0B" strokeWidth="4" strokeLinecap="round" />
+        {data.map((point, index) => {
+          const x = padding + (index / Math.max(data.length - 1, 1)) * chartWidth;
+          const savedY = height - padding - (point.saved / maxValue) * chartHeight;
+          const wastedY = height - padding - (point.wasted / maxValue) * chartHeight;
+          return (
+            <g key={point.month}>
+              <circle cx={x} cy={savedY} r="4.5" fill="#10B981" />
+              <circle cx={x} cy={wastedY} r="4.5" fill="#F59E0B" />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
+        {data.map((point) => (
+          <span key={point.month}>{point.month}</span>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-4 text-sm text-slate-300">
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />Saved</span>
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Would have wasted</span>
+      </div>
+    </div>
+  );
+}
+
+function SimpleDonutChart({ data }) {
+  const size = 240;
+  const strokeWidth = 34;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const total = data.reduce((sum, item) => sum + item.value, 0) || 1;
+  let offset = 0;
+
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-6">
+      <div className="relative h-[240px] w-[240px]">
+        <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={strokeWidth} />
+          {data.map((entry, index) => {
+            const length = (entry.value / total) * circumference;
+            const dashOffset = circumference - offset;
+            offset += length;
+            return (
+              <circle
+                key={entry.name}
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="none"
+                stroke={PIE_COLORS[index % PIE_COLORS.length]}
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${length} ${circumference - length}`}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="round"
+              />
+            );
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-sm uppercase tracking-[0.28em] text-slate-400">Tracked</span>
+          <span className="mt-2 font-mono text-3xl text-white">{total}%</span>
+        </div>
+      </div>
+      <div className="grid w-full gap-3">
+        {data.map((entry, index) => (
+          <div key={entry.name} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-sm">
+            <span className="inline-flex items-center gap-3 text-slate-200">
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
+              {entry.name}
+            </span>
+            <span className="font-mono text-white">{entry.value}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SimpleBarChart({ data }) {
+  const maxValue = Math.max(...data.flatMap((point) => [point.saved, point.wasted]), 1);
+
+  return (
+    <div className="flex h-full items-end gap-4 overflow-hidden pt-6">
+      {data.map((point) => (
+        <div key={point.month} className="flex flex-1 flex-col items-center gap-3">
+          <div className="flex h-full w-full items-end justify-center gap-2">
+            <div className="w-full max-w-6 rounded-t-2xl bg-emerald-400/90" style={{ height: `${(point.saved / maxValue) * 100}%` }} />
+            <div className="w-full max-w-6 rounded-t-2xl bg-amber-400/90" style={{ height: `${(point.wasted / maxValue) * 100}%` }} />
+          </div>
+          <span className="text-xs text-slate-400">{point.month}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1785,6 +2271,7 @@ function App() {
   const [restaurantDeals] = useLocalStorageState("freshmind-restaurant-deals", seedRestaurantDeals);
   const [savingsHistory] = useLocalStorageState("freshmind-savings-history", seedSavingsHistory);
   const [wasteBreakdown] = useLocalStorageState("freshmind-waste-breakdown", seedWasteBreakdown);
+  const [workspaceProfile] = useLocalStorageState("freshmind-workspace-profile", seedWorkspaceProfile);
   const [recipeSuggestions, setRecipeSuggestions] = useLocalStorageState("freshmind-recipe-suggestions", []);
   const [page, setPage] = useState(() => (currentUser ? "dashboard" : "landing"));
   const [authMode, setAuthMode] = useState("signup");
@@ -1885,6 +2372,7 @@ function App() {
           currentTab={currentTab}
           setCurrentTab={setCurrentTab}
           onLogout={handleLogout}
+          workspaceProfile={workspaceProfile}
           foodItems={foodItems}
           setFoodItems={setFoodItems}
           recipeSuggestions={recipeSuggestions}
@@ -1906,7 +2394,7 @@ function App() {
     }
 
     return <LandingPage onGetStarted={() => openAuth("signup")} onTryDemo={handleDemo} onDownload={handleDownload} onOpenAuth={() => openAuth("login")} />;
-  }, [authError, authMode, currentTab, currentUser, foodItems, marketplaceListings, page, recipeSuggestions, restaurantDeals, savedRecipes, savingsHistory, wasteBreakdown]);
+  }, [authError, authMode, currentTab, currentUser, foodItems, marketplaceListings, page, recipeSuggestions, restaurantDeals, savedRecipes, savingsHistory, wasteBreakdown, workspaceProfile]);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-ink text-white">
