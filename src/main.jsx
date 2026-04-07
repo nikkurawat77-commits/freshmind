@@ -158,7 +158,7 @@ const SCREEN_PREVIEWS = [
 
 const NAV_TABS = [
   { id: "dashboard", label: "Dashboard", icon: Home },
-  { id: "food", label: "My Food", icon: Fridge },
+  { id: "food", label: "My Food", icon: Refrigerator },
   { id: "recipes", label: "Recipes", icon: ChefHat },
   { id: "marketplace", label: "Marketplace", icon: ShoppingBag },
   { id: "alerts", label: "Alerts", icon: BellRing }
@@ -972,7 +972,7 @@ function DashboardHome({ currentUser, foodItems, savingsHistory, wasteBreakdown,
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: "Items in fridge", value: foodItems.length, icon: Fridge },
+          { label: "Items in fridge", value: foodItems.length, icon: Refrigerator },
           { label: "Money saved this month", value: `$${totalSavings}`, icon: CircleDollarSign },
           { label: "Waste avoided", value: `${totalWasteAvoided} kg`, icon: Leaf },
           { label: "Recipes tried", value: savedRecipes.length + 7, icon: ChefHat }
