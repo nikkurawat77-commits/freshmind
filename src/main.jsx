@@ -151,6 +151,30 @@ const NAV_TABS = [
   { id: "alerts", label: "Alerts", icon: BellRing }
 ];
 
+const BILLING_PLANS = [
+  {
+    id: "starter",
+    name: "Starter",
+    price: "$19",
+    blurb: "For individuals building better kitchen habits.",
+    features: ["1 workspace", "Recipe AI", "Expiry reminders"]
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    price: "$49",
+    blurb: "For growing teams that want automated rescue flows.",
+    features: ["5 seats", "AI Studio", "Marketplace optimizer"]
+  },
+  {
+    id: "scale",
+    name: "Scale",
+    price: "$129",
+    blurb: "For multi-location operators and advanced reporting.",
+    features: ["Unlimited seats", "API access", "Priority forecasting"]
+  }
+];
+
 function isoFromDays(offset) {
   const date = new Date();
   date.setHours(12, 0, 0, 0);
@@ -423,33 +447,49 @@ function parseClaudeRecipes(text) {
 }
 
 async function fetchClaudeRecipes(items) {
-  const ingredientList = items.map((item) => `${item.name} (${item.qty})`).join(", ");
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || window.__ANTHROPIC_API_KEY || "";
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("/api/recipes", {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      "anthropic-version": "2023-06-01",
-      ...(apiKey ? { "x-api-key": apiKey } : {})
+      "content-type": "application/json"
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content:
-            `Based on these ingredients: ${ingredientList}. ` +
-            'Suggest 3 quick recipes with steps. Return JSON array with: name, ingredients, steps (array), time, difficulty, emoji.'
-        }
-      ]
-    })
+    body: JSON.stringify({ foodItems: items })
   });
 
-  if (!response.ok) throw new Error(`Claude request failed with status ${response.status}`);
+  if (!response.ok) throw new Error(`Recipe API failed with status ${response.status}`);
   const data = await response.json();
-  const text = data?.content?.map((entry) => entry.text || "").join("\n") || "";
-  return parseClaudeRecipes(text);
+  return data;
+}
+
+async function fetchForecastInsights(payload) {
+  const response = await fetch("/api/forecast", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) throw new Error(`Forecast API failed with status ${response.status}`);
+  return response.json();
+}
+
+async function createBillingCheckout(plan, customerEmail) {
+  const response = await fetch("/api/billing-checkout", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({ plan, customerEmail })
+  });
+
+  if (!response.ok) throw new Error(`Billing API failed with status ${response.status}`);
+  return response.json();
+}
+
+async function fetchRuntimeConfig() {
+  const response = await fetch("/api/config");
+  if (!response.ok) throw new Error(`Config API failed with status ${response.status}`);
+  return response.json();
 }
 
 function AnimatedCounter({ value, prefix = "", suffix = "", decimals = 0 }) {
@@ -1383,10 +1423,18 @@ function RecipesPage({ foodItems, recipeSuggestions, setRecipeSuggestions, saved
     setRecipeError("");
     setLoading(true);
     try {
-      const recipes = await fetchClaudeRecipes(foodItems);
-      setRecipeSuggestions(recipes);
-      setSourceLabel("Live Claude response");
-      addToast("AI recipes ready", "Claude returned three recipe suggestions.");
+      const payload = await fetchClaudeRecipes(foodItems);
+      setRecipeSuggestions(payload.recipes || []);
+      setSourceLabel(payload.source === "anthropic" ? "Server AI response" : "Fallback recipe engine");
+      if (payload.message) {
+        setRecipeError(payload.message);
+      }
+      addToast(
+        "AI recipes ready",
+        payload.source === "anthropic"
+          ? "FreshMind generated recipes through the server AI endpoint."
+          : "FreshMind used the built-in rescue recipe engine."
+      );
     } catch {
       const fallback = buildFallbackRecipes(foodItems);
       setRecipeSuggestions(fallback);
@@ -1813,8 +1861,62 @@ function MarketplacePage({ foodItems, marketplaceListings, setMarketplaceListing
   );
 }
 
-function AIStudioPage({ foodItems, marketplaceListings, savingsHistory, savedRecipes, workspaceProfile, setRecipeSuggestions, addToast }) {
+function AIStudioPage({ currentUser, foodItems, marketplaceListings, savingsHistory, savedRecipes, workspaceProfile, setRecipeSuggestions, addToast }) {
   const aiOps = buildAiOperatingSystem(foodItems, marketplaceListings, savingsHistory, savedRecipes);
+  const [serverInsights, setServerInsights] = useState(null);
+  const [serverSource, setServerSource] = useState("Loading");
+  const [billingLoading, setBillingLoading] = useState("");
+  const [capabilities, setCapabilities] = useState({
+    liveRecipes: false,
+    liveBilling: false,
+    liveAuth: false
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadServerSignals() {
+      try {
+        const [forecastPayload, configPayload] = await Promise.all([
+          fetchForecastInsights({ foodItems, marketplaceListings, savingsHistory }),
+          fetchRuntimeConfig()
+        ]);
+
+        if (cancelled) {
+          return;
+        }
+
+        setServerInsights(forecastPayload.insights);
+        setServerSource(forecastPayload.source || "freshmind-forecast-engine");
+        setCapabilities(configPayload.capabilities || capabilities);
+      } catch {
+        if (!cancelled) {
+          setServerSource("local-fallback");
+        }
+      }
+    }
+
+    loadServerSignals();
+    return () => {
+      cancelled = true;
+    };
+  }, [foodItems, marketplaceListings, savingsHistory]);
+
+  async function handlePlanCheckout(planId) {
+    setBillingLoading(planId);
+    try {
+      const result = await createBillingCheckout(planId, currentUser.email);
+      if (result.mode === "live" && result.url) {
+        window.location.href = result.url;
+        return;
+      }
+      addToast("Billing not configured", result.message || "Stripe environment variables are still missing.");
+    } catch {
+      addToast("Billing error", "FreshMind could not start checkout right now.");
+    } finally {
+      setBillingLoading("");
+    }
+  }
 
   return (
     <motion.div key="ai-studio-page" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.3 }} className="space-y-6">
@@ -1884,6 +1986,19 @@ function AIStudioPage({ foodItems, marketplaceListings, savingsHistory, savedRec
                 : "Inventory looks balanced. Keep notifications and recipe prompts on schedule to maintain savings momentum."}
             </p>
           </div>
+          <div className="mt-4 rounded-[28px] border border-cyan-400/20 bg-cyan-400/10 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-cyan-200">Backend intelligence</p>
+                <p className="mt-2 font-display text-2xl text-white">
+                  {serverInsights ? serverInsights.executiveBrief : "Generating an operational brief from the API layer..."}
+                </p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-slate-950/40 px-3 py-1 text-xs uppercase tracking-[0.28em] text-slate-200">
+                {serverSource}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1927,6 +2042,47 @@ function AIStudioPage({ foodItems, marketplaceListings, savingsHistory, savedRec
               </motion.div>
             ))}
           </div>
+        </div>
+      </div>
+
+      <div className="rounded-[32px] border border-white/10 bg-white/5 p-5 backdrop-blur-xl lg:p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Billing</p>
+            <h2 className="mt-2 font-display text-2xl text-white">Upgrade FreshMind like a real SaaS product</h2>
+            <p className="mt-3 text-sm leading-7 text-slate-400">
+              Server-side billing is now wired through `/api/billing-checkout`. Add Stripe env vars to switch from demo mode to live checkout instantly.
+            </p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-slate-950/45 px-4 py-2 text-sm text-slate-200">
+            Billing: {capabilities.liveBilling ? "Live" : "Demo-ready"}
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+          {BILLING_PLANS.map((plan) => (
+            <motion.div key={plan.id} whileHover={{ y: -4, scale: 1.01 }} className={`rounded-[28px] border p-5 ${plan.id === "growth" ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-slate-950/45"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-display text-2xl text-white">{plan.name}</p>
+                  <p className="mt-2 font-mono text-3xl text-white">{plan.price}<span className="text-sm text-slate-400">/mo</span></p>
+                </div>
+                {plan.id === "growth" ? <span className="rounded-full border border-emerald-400/25 bg-emerald-400/15 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">Popular</span> : null}
+              </div>
+              <p className="mt-4 text-sm leading-7 text-slate-400">{plan.blurb}</p>
+              <div className="mt-5 space-y-2">
+                {plan.features.map((feature) => (
+                  <div key={feature} className="flex items-center gap-3 text-sm text-slate-200">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                    {feature}
+                  </div>
+                ))}
+              </div>
+              <GlowButton onClick={() => handlePlanCheckout(plan.id)} className="mt-6 w-full justify-center bg-white/5 text-white">
+                {billingLoading === plan.id ? "Starting checkout..." : `Choose ${plan.name}`}
+              </GlowButton>
+            </motion.div>
+          ))}
         </div>
       </div>
     </motion.div>
@@ -2049,7 +2205,7 @@ function DashboardShell({
         <main className="mt-8">
           <AnimatePresence mode="wait">
             {currentTab === "dashboard" ? <DashboardHome key="dashboard-tab" currentUser={currentUser} foodItems={foodItems} savingsHistory={savingsHistory} wasteBreakdown={wasteBreakdown} savedRecipes={savedRecipes} marketplaceListings={marketplaceListings} workspaceProfile={workspaceProfile} /> : null}
-            {currentTab === "insights" ? <AIStudioPage key="insights-tab" foodItems={foodItems} marketplaceListings={marketplaceListings} savingsHistory={savingsHistory} savedRecipes={savedRecipes} workspaceProfile={workspaceProfile} setRecipeSuggestions={setRecipeSuggestions} addToast={addToast} /> : null}
+            {currentTab === "insights" ? <AIStudioPage key="insights-tab" currentUser={currentUser} foodItems={foodItems} marketplaceListings={marketplaceListings} savingsHistory={savingsHistory} savedRecipes={savedRecipes} workspaceProfile={workspaceProfile} setRecipeSuggestions={setRecipeSuggestions} addToast={addToast} /> : null}
             {currentTab === "food" ? <MyFoodPage key="food-tab" foodItems={foodItems} setFoodItems={setFoodItems} addToast={addToast} /> : null}
             {currentTab === "recipes" ? <RecipesPage key="recipes-tab" foodItems={foodItems} recipeSuggestions={recipeSuggestions} setRecipeSuggestions={setRecipeSuggestions} savedRecipes={savedRecipes} setSavedRecipes={setSavedRecipes} addToast={addToast} /> : null}
             {currentTab === "marketplace" ? <MarketplacePage key="marketplace-tab" foodItems={foodItems} marketplaceListings={marketplaceListings} setMarketplaceListings={setMarketplaceListings} restaurantDeals={restaurantDeals} addToast={addToast} /> : null}
@@ -2282,6 +2438,26 @@ function App() {
   useEffect(() => {
     if (currentUser && page !== "dashboard") setPage("dashboard");
   }, [currentUser, page]);
+
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const checkoutStatus = search.get("checkout");
+    if (!checkoutStatus) {
+      return;
+    }
+
+    if (checkoutStatus === "success") {
+      addToast("Checkout complete", "Your billing flow finished successfully.");
+    }
+
+    if (checkoutStatus === "cancelled") {
+      addToast("Checkout cancelled", "You can restart billing whenever you are ready.");
+    }
+
+    search.delete("checkout");
+    const nextUrl = search.toString() ? `${window.location.pathname}?${search.toString()}` : window.location.pathname;
+    window.history.replaceState({}, "", nextUrl);
+  }, []);
 
   function addToast(title, message) {
     const id = makeId("toast");
