@@ -195,6 +195,15 @@ function demoUser() {
   };
 }
 
+function googlePreviewUser() {
+  return {
+    name: "Mia Kapoor",
+    email: "google-preview@freshmind.app",
+    password: "google-preview",
+    joined: "2026-04-07"
+  };
+}
+
 function seedFoodItems() {
   return [
     { id: makeId("food"), name: "Spinach", category: "Vegetables", qty: "2 bags", expiry: isoFromDays(1), addedDate: isoFromDays(-2), reminder: true },
@@ -791,7 +800,7 @@ function Toasts({ toasts, dismissToast }) {
   );
 }
 
-function LandingPage({ onGetStarted, onTryDemo, onDownload, onOpenAuth }) {
+function LandingPage({ onGetStarted, onTryDemo, onDownload, onOpenAuth, downloadLabel = "Download App", downloadHint = "Install FreshMind for faster home-screen access." }) {
   const heroWords = "Save Money & Reduce Food Waste with AI-Powered Kitchen Tracking".split(" ");
   const [newsletter, setNewsletter] = useState("");
   const [testimonialIndex, setTestimonialIndex] = useState(0);
@@ -877,9 +886,13 @@ function LandingPage({ onGetStarted, onTryDemo, onDownload, onOpenAuth }) {
               </GlowButton>
               <GlowButton onClick={onDownload} className="bg-white/5 text-white">
                 <span className="text-base">📱</span>
-                Download App
+                {downloadLabel}
               </GlowButton>
             </motion.div>
+
+            <motion.p initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.63 }} className="mt-4 text-sm text-slate-400">
+              {downloadHint}
+            </motion.p>
 
             <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }} className="mt-10 grid gap-4 sm:grid-cols-3">
               {[
@@ -1194,7 +1207,7 @@ function AuthPage({ authMode, setAuthMode, onBack, onAuthSubmit, onTryDemo, onGo
 
               <GlowButton type="button" onClick={onGoogle} className="w-full justify-center bg-white/5 text-white">
                 <Globe size={18} />
-                Continue with Google
+                Continue with Google Preview
               </GlowButton>
 
               <button type="button" onClick={onTryDemo} className="w-full rounded-2xl border border-dashed border-emerald-400/30 bg-emerald-400/5 px-4 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-400/10">
@@ -2574,11 +2587,56 @@ function App() {
   });
   const [dataMode, setDataMode] = useState("demo");
   const [dataSyncing, setDataSyncing] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState(null);
+  const [isInstallReady, setIsInstallReady] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(() => window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true);
   const wasteBreakdown = useMemo(() => buildWasteBreakdown(foodItems), [foodItems]);
 
   useEffect(() => {
     if (currentUser && page !== "dashboard") setPage("dashboard");
   }, [currentUser, page]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) {
+      return undefined;
+    }
+
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Keep app usable even if PWA registration fails.
+    });
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    function handleBeforeInstallPrompt(event) {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+      setIsInstallReady(true);
+    }
+
+    function handleAppInstalled() {
+      setInstallPromptEvent(null);
+      setIsInstallReady(false);
+      setIsStandalone(true);
+      addToast("FreshMind installed", "You can now open FreshMind from your home screen like a real app.");
+    }
+
+    function handleDisplayModeChange(event) {
+      setIsStandalone(event.matches);
+    }
+
+    const mediaQuery = window.matchMedia ? window.matchMedia("(display-mode: standalone)") : null;
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    mediaQuery?.addEventListener?.("change", handleDisplayModeChange);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      mediaQuery?.removeEventListener?.("change", handleDisplayModeChange);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2900,7 +2958,16 @@ function App() {
   }
 
   function handleGoogle() {
-    addToast("Google sign-in", "This is a polished UI placeholder for OAuth.");
+    const previewUser = googlePreviewUser();
+    setAuthSession(null);
+    loadPrototypeDataset();
+    setUsers((current) => (
+      current.some((user) => user.email === previewUser.email)
+        ? current
+        : [...current, previewUser]
+    ));
+    loginAs(previewUser);
+    addToast("Google preview login", "FreshMind opened a working Google-style preview session. Real OAuth can be connected later.");
   }
 
   function handleLogout() {
@@ -2913,7 +2980,32 @@ function App() {
   }
 
   function handleDownload() {
-    addToast("Mobile app coming soon", "FreshMind for iOS and Android is on the roadmap.");
+    if (isStandalone) {
+      addToast("Already installed", "FreshMind is already running like an installed app on this device.");
+      return;
+    }
+
+    if (installPromptEvent) {
+      installPromptEvent.prompt();
+      installPromptEvent.userChoice
+        .then((choice) => {
+          if (choice.outcome === "accepted") {
+            addToast("Install started", "Finish the browser prompt to add FreshMind to your device.");
+          } else {
+            addToast("Install dismissed", "You can install FreshMind any time from the browser menu.");
+          }
+        })
+        .finally(() => {
+          setInstallPromptEvent(null);
+          setIsInstallReady(false);
+        });
+      return;
+    }
+
+    addToast(
+      "Install from browser",
+      "Open the browser menu or address-bar install icon to add FreshMind to your home screen."
+    );
   }
 
   function handleAddFoodItem(item) {
@@ -3018,8 +3110,23 @@ function App() {
       return <AuthPage authMode={authMode} setAuthMode={setAuthMode} onBack={() => setPage("landing")} onAuthSubmit={handleAuthSubmit} onTryDemo={handleDemo} onGoogle={handleGoogle} errorMessage={authError} authCapabilities={authCapabilities} />;
     }
 
-    return <LandingPage onGetStarted={() => openAuth("signup")} onTryDemo={handleDemo} onDownload={handleDownload} onOpenAuth={() => openAuth("login")} />;
-  }, [authCapabilities, authError, authMode, currentTab, currentUser, dataMode, dataSyncing, foodItems, marketplaceListings, page, recipeSuggestions, restaurantDeals, savedRecipes, savingsHistory, wasteBreakdown, workspaceProfile]);
+    return (
+      <LandingPage
+        onGetStarted={() => openAuth("signup")}
+        onTryDemo={handleDemo}
+        onDownload={handleDownload}
+        onOpenAuth={() => openAuth("login")}
+        downloadLabel={isStandalone ? "App Installed" : isInstallReady ? "Install App" : "Download App"}
+        downloadHint={
+          isStandalone
+            ? "FreshMind is already installed on this device."
+            : isInstallReady
+              ? "Your browser is ready to install FreshMind as an app."
+              : "Open FreshMind in Chrome or Edge to install it on your device."
+        }
+      />
+    );
+  }, [authCapabilities, authError, authMode, currentTab, currentUser, dataMode, dataSyncing, foodItems, marketplaceListings, page, recipeSuggestions, restaurantDeals, savedRecipes, savingsHistory, wasteBreakdown, workspaceProfile, installPromptEvent, isInstallReady, isStandalone]);
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-ink text-white">

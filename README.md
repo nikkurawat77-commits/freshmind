@@ -16,6 +16,7 @@ Live product areas include:
 - savings analytics and custom SVG product charts
 - leftover marketplace and nearby restaurant deals
 - mobile-ready install metadata via web manifest and app icons
+- installable PWA flow with service worker support and browser install prompt
 
 ## Tech Stack
 
@@ -103,6 +104,7 @@ Production SQL and deployment handoff:
 - `index.html` provides the Vite entry shell, fonts, and Tailwind config
 - `vite.config.js` adds React support and bundle chunking
 - `public/manifest.webmanifest` makes the app install-ready
+- `public/sw.js` provides the PWA shell cache and installable offline support
 
 ## Notes
 
