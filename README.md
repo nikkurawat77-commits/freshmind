@@ -11,6 +11,7 @@ Live product areas include:
 - server-backed forecast intelligence via `/api/forecast`
 - Stripe-ready billing flow via `/api/billing-checkout`
 - session validation via `/api/auth/*` and workspace persistence via `/api/workspace`
+- health endpoint via `/api/health`
 - savings analytics and custom SVG product charts
 - leftover marketplace and nearby restaurant deals
 - mobile-ready install metadata via web manifest and app icons
@@ -70,6 +71,11 @@ When Supabase env vars are present, the frontend uses:
 
 Without those env vars, FreshMind automatically falls back to the local prototype auth path.
 
+Production SQL and deployment handoff:
+
+- [workspace_profiles.sql](C:\Users\Ayush%20Rawat\Documents\New%20project\supabase\workspace_profiles.sql)
+- [production-setup.md](C:\Users\Ayush%20Rawat\Documents\New%20project\docs\production-setup.md)
+
 ## Project Structure
 
 - `src/main.jsx` contains the main product app
@@ -77,9 +83,11 @@ Without those env vars, FreshMind automatically falls back to the local prototyp
 - `api/forecast.js` powers server-side forecasting and operational insights
 - `api/billing-checkout.js` powers Stripe-ready billing sessions
 - `api/config.js` exposes backend capability flags to the frontend
+- `api/health.js` exposes a simple readiness and capability health check
 - `api/auth/` contains Supabase-backed signup, login, and session validation
 - `api/workspace.js` handles workspace profile hydration and persistence
 - `lib/server/` contains shared server helpers
+- `supabase/workspace_profiles.sql` contains the production table, trigger, and RLS policies
 - `index.html` provides the Vite entry shell, fonts, and Tailwind config
 - `vite.config.js` adds React support and bundle chunking
 - `public/manifest.webmanifest` makes the app install-ready
@@ -89,4 +97,5 @@ Without those env vars, FreshMind automatically falls back to the local prototyp
 - Authentication now supports Supabase-backed sessions when env vars are configured, with local fallback for prototype use.
 - Recipe generation, forecasting, and billing now have server-side API surfaces so the app is closer to a real SaaS architecture.
 - Workspace persistence uses Supabase when `SUPABASE_SERVICE_ROLE_KEY` is available, otherwise it stays in demo mode.
+- `/api/health` is available for uptime checks and quick deployment verification.
 - The app is fully responsive and designed to be portfolio-ready.
